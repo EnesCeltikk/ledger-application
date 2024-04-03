@@ -292,3 +292,38 @@ func Withdraw(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Fprintf(w, "User %d balance updated successfully to %f", user.Id, newBalance)
 }
+
+func SignUpUser(w http.ResponseWriter, r *http.Request) {
+	var user database.User
+
+	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+
+		return
+	}
+
+	var existingUser database.User
+	if err := database.Db.Where("email = ? AND deleted_at IS NULL", user.Email).First(&existingUser).Error; err == nil {
+		http.Error(w, "Email exists", http.StatusBadRequest)
+		return
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	user.Password = string(hashedPassword)
+
+	if err := database.Db.Create(&user).Error; err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"message": "User created",
+		"user":    user,
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
